@@ -1,0 +1,6 @@
+streamlit>=1.41
+groq
+python-dotenv
+pypdf
+scikit-learn
+pillow
