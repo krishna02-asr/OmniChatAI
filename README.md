@@ -1,57 +1,57 @@
-# 🤖 AI Chat Bot
+# OmniChat
 
-A browser-based AI chatbot built with **Streamlit** and **Groq**, supporting text, images, voice, and document Q&A in one interface.
+OmniChat is a chatbot built with Streamlit and the Groq API. You can upload PDF or text files and ask questions about them. It answers from those files and tells you which file and page it used. It can also read images and take voice messages.
 
-# Features
+## Running it
 
-- 💬 **Streaming chat** — replies appear word-by-word, like ChatGPT
-- 🖼️ **Vision** — attach a photo in the chat box and ask questions about it (auto-switches to a vision model)
-- 🎙️ **Voice input** — record a message; it's transcribed with Groq's Whisper model
-- 🔊 **Voice output** — optionally have replies read aloud (Groq TTS)
-- 📄 **Document Q&A (RAG)** — upload a PDF and ask questions about its contents; relevant excerpts are retrieved with **TF-IDF + cosine similarity** and injected into the prompt
-- 🎭 **Personas** — switch the bot's personality on the fly
-- 🧠 **Context-aware** — the real current date/time is always passed to the model, and long conversations are automatically trimmed to stay within the model's context window
-- 🔐 **Secure config** — the API key is loaded from a local `.env` file, never hardcoded
-- 🛡️ **Graceful errors** — specific messages for invalid keys, rate limits, and network issues instead of a crash
-- 💾 **Export** — download the full conversation as a `.txt` file
-
-## Architecture
+You need Python 3.10 or newer and a Groq API key.
 
 ```
-app.py                 Streamlit UI + chat/session logic
-.streamlit/config.toml Custom app theme
-.env                   Local secrets (not committed — see .gitignore)
-requirements.txt       Python dependencies
-```
-
-Chat history lives in Streamlit's per-session state rather than a shared file on disk, so if this is deployed publicly, different visitors never see each other's conversations.
-
-Document Q&A avoids a full vector-database/embedding-model dependency: PDF text is chunked, vectorized with scikit-learn's `TfidfVectorizer`, and the most relevant chunks are retrieved per question with cosine similarity — a lightweight retrieval-augmented-generation (RAG) approach.
-
-## Setup
-
-```bash
 pip install -r requirements.txt
 ```
 
-Create a `.env` file in this folder:
+Create a file called `.env` next to `app.py` and put your key in it:
 
 ```
 GROQ_API_KEY=your_key_here
 ```
 
-Get a free key at [console.groq.com/keys](https://console.groq.com/keys).
+Then start the app:
 
-Run it:
-
-```bash
+```
 streamlit run app.py
 ```
 
-## Deploying (optional)
+The first run is slow because it downloads a small embedding model (about 90 MB). After that it starts normally.
 
-Push this repo to GitHub, then deploy for free at [share.streamlit.io](https://share.streamlit.io) to get a live link — add your `GROQ_API_KEY` under the app's "Secrets" settings instead of uploading `.env`.
+## How it answers from documents
 
-## Tech Stack
+Groq doesn't offer an embeddings API, so the document search runs locally with `sentence-transformers`.
 
-Python · Streamlit · Groq API (Llama 4 Scout, Whisper, Orpheus TTS) · scikit-learn · pypdf · Pillow
+1. Each uploaded file is read and cut into passages of about 150 words. Neighbouring passages share 30 words so a sentence on the edge isn't cut in half.
+2. Every passage is turned into a vector with the `all-MiniLM-L6-v2` model.
+3. When you ask something, the question gets the same treatment and is compared to every passage with cosine similarity.
+4. The best four passages (above a minimum score) are added to the system prompt, and the model is told to answer from them and name the source. If nothing relevant is found, it says the documents don't cover the question before falling back on general knowledge.
+
+Short follow-up questions like "and the second one?" are joined with the previous question before searching, otherwise they find nothing useful.
+
+## Files
+
+```
+app.py        the Streamlit page and the logic for one chat turn
+config.py     model names, limits and retrieval settings
+llm.py        Groq client, system prompt, streaming
+rag.py        reading files, chunking, embeddings, search
+audio.py      speech to text and text to speech
+vision.py     resizing images before they are sent
+helpers.py    small message helpers, chat export
+styles.py     CSS for the page
+```
+
+Settings like chunk size, number of passages and the similarity cutoff are at the top of `config.py`.
+
+## Known limits
+
+- The document index lives in memory, so refreshing the page clears it. Saving it to a vector store like ChromaDB would fix that.
+- Scanned PDFs have no text layer, so they need OCR before they can be used.
+- Search looks at the question only. There is no reranking step, so a vague question can pull in weak passages.

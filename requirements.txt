@@ -1,6 +1,7 @@
-streamlit>=1.41
+streamlit>=1.65.0
 groq
 python-dotenv
-pypdf
-scikit-learn
 pillow
+pypdf
+numpy
+sentence-transformers
